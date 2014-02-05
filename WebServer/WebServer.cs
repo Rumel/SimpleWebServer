@@ -30,6 +30,7 @@ namespace WebServer
     {
         private readonly string _webRoot;
         private IScriptProcessor _scriptProcessor;
+        private IScriptProcessor _webTemplateProcessor;
 
         static void Main(string[] args)
         {
@@ -56,6 +57,7 @@ namespace WebServer
 
             /*TODO: add another instance of a IScriptProcessor to handle files of
              * type csweb */
+            _webTemplateProcessor = new CWebTemplateProcessor();
 
             /* set the root for the server */
             _webRoot = root;
@@ -211,6 +213,11 @@ namespace WebServer
                 /* TODO: add another handler for processing web template files
                  * case ".csweb": 
                  */
+                case ".csweb":
+                {
+                    _GenerateWebTemplateResult(socket, path, requestParameters);
+                    return;
+                }
                 default:
                     type = "application/octet-stream";
                     break;
@@ -300,6 +307,25 @@ namespace WebServer
             else
             {
                 /* send a response with the results of the script evaluation */
+                _SendResponse(socket, Encoding.ASCII.GetBytes(result.Result), "text/html; charset=utf8", ResponseType.OK);
+            }
+        }
+
+        /* This method will process a web template and send the results as the
+         * body of the response */
+
+        private void _GenerateWebTemplateResult(Socket socket, string path, Dictionary<string, string> requestParameters)
+        {
+            ScriptResult result = _webTemplateProcessor.ProcessScript(path, requestParameters);
+
+            /* if the result was an error, send an HTTP Error (500) along with a summary of
+             * what went wrong as the body */
+            if (result.Error)
+            {
+                _SendResponse(socket, Encoding.ASCII.GetBytes(result.Result), "text/html; charset=utf8", ResponseType.ERROR);
+            }
+            else
+            {
                 _SendResponse(socket, Encoding.ASCII.GetBytes(result.Result), "text/html; charset=utf8", ResponseType.OK);
             }
         }

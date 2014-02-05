@@ -97,7 +97,10 @@ namespace WebServer
                 while (true)
                 {
                     int i = socket.Receive(content, 1024, 0);
-                    if (i == 0) { return; }
+                    if (i == 0)
+                    {
+                        return;
+                    }
 
                     headerBuf.Append(Encoding.ASCII.GetString(content));
 
@@ -131,6 +134,8 @@ namespace WebServer
                  */
                 string resource = header.Substring(4, header.IndexOf("HTTP") - 4).Trim();
 
+                Console.WriteLine(resource);
+
                 /* If the root is being requested, send back a default web page stating
                  * that this server doesn't support default documents or directory
                  * listing. 
@@ -141,39 +146,57 @@ namespace WebServer
                  * a default document doesn't exist, an HTTP Not Found response should
                  * be returned
                  */
-                if (resource.Equals("/"))
+
+                string[] parts = resource.Split('?');
+                resource = parts[0];
+                var extension = resource.Split('.');
+                if (extension.Length == 2)
                 {
-                    string html = "<html><body><h1>Server Server v. 1.0</h1><p>Default pages aren't support, request a specific resources</p></body></html>";
-                    _SendResponse(socket, Encoding.UTF8.GetBytes(html), "text/html; charset=utf8", ResponseType.OK);
-                }
-                else
-                {
-                    /* if an actual resource was requested, append the webroot to it to transform 
-                     * the path to a system local path and parse the full path to separate the path
-                     * from the request variables */
                     resource = string.Format("{0}{1}", _webRoot, resource.Replace("/", @"\"));
-                    string[] parts = resource.Split('?');
-                    resource = parts[0]; // the resource is the first half of the path
-
-                    /* the request variables are the second part of the path and these are loaded
-                     * into an IDictionary instance to be used later */
-                    Dictionary<string, string> requestParameters = parts.Count() > 1 ? parts[1].Split(new[] { '&' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(part => part.Split('='))
-                         .ToDictionary(split => split[0], split => split[1]) : new Dictionary<string, string>();
-
-                    /* if the path is to a file that exists under the webroot directory, 
-                     * create an HTTP response with that file in the response body */
+                    var requestParameters = parts.Count() > 1
+                        ? parts[1].Split(new[] {'&'}, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(part => part.Split('='))
+                            .ToDictionary(split => split[0], split => split[1])
+                        : new Dictionary<string, string>();
                     if (File.Exists(resource))
                     {
                         _ProcessBody(socket, resource, requestParameters);
                     }
                     else
                     {
-                        /* otherwise generate a Not Found (404) response */ 
+                        /* otherwise generate a Not Found (404) response */
                         _SendResponse(socket, new byte[0], null, ResponseType.NOT_FOUND);
                     }
                 }
+                else
+                {
+                    resource = string.Format("{0}{1}", _webRoot, resource.Replace("/", @"\"));
 
+                    // Check default pages
+                    var foundExtension = "";
+                    foreach (var x in new String[]{ @"\index.html", @"\index.htm", @"\index.csscript", @"\index.csweb"})
+                    {
+                        if (File.Exists(resource + x))
+                        {
+                            foundExtension = x;
+                            break;
+                        }
+                    }
+
+                    if (foundExtension.Length > 0)
+                    {
+                        Dictionary<string, string> requestParameters = parts.Count() > 1
+                            ? parts[1].Split(new[] {'&'}, StringSplitOptions.RemoveEmptyEntries)
+                                .Select(part => part.Split('='))
+                                .ToDictionary(split => split[0], split => split[1])
+                            : new Dictionary<string, string>();
+                        _ProcessBody(socket, resource + foundExtension, requestParameters);
+                    }
+                    else
+                    {
+                        _SendResponse(socket, new byte[0], null, ResponseType.NOT_FOUND);
+                    }
+                }
             }
             socket.Close(); // always make sure to close network and file handles!!
         }
